@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dinosaur World – Escape | Prototipo 3D</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; background: #10191b; color: #eef4ed; }
+    canvas { display: block; }
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    .panel { position: absolute; background: linear-gradient(135deg, rgba(14,24,24,.88), rgba(19,31,29,.72)); border: 1px solid rgba(226,239,216,.2); box-shadow: 0 12px 40px #0005; backdrop-filter: blur(12px); border-radius: 12px; }
+    #brand { top: 20px; left: 20px; padding: 13px 17px; }
+    #brand strong { display:block; font-size: 15px; letter-spacing: .13em; }
+    #brand span { color: #a7b9aa; font-size: 11px; letter-spacing: .12em; }
+    #objectives { top: 20px; right: 20px; width: min(290px, calc(100vw - 40px)); padding: 15px 17px; }
+    #objectives h2 { font-size: 12px; margin:0 0 9px; text-transform: uppercase; letter-spacing: .15em; color:#c9d7c9; }
+    #objectiveText { font-size: 13px; line-height: 1.65; color:#d5e0d3; }
+    #prompt { left: 50%; bottom: 60px; transform: translateX(-50%); padding: 12px 18px; font-size: 14px; opacity:0; transition: opacity .18s; white-space: nowrap; }
+    #help { left: 20px; bottom: 20px; padding: 10px 13px; color:#d0dcd1; font-size:12px; }
+    #status { right: 20px; bottom: 20px; padding: 10px 13px; color:#c7d7c8; font-size:12px; }
+    #crosshair { position:absolute; top:50%; left:50%; width:5px;height:5px;border-radius:50%; background:#fff9; box-shadow:0 0 8px #fff; transform:translate(-50%,-50%); }
+    #venom { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .3s; background:radial-gradient(ellipse at center, transparent 34%, rgba(87,190,88,.28) 100%); }
+    #toast { position:absolute; left:50%; top:20%; transform:translateX(-50%); padding:10px 16px; background:#14201de8; border:1px solid #9bbd8c66; border-radius:8px; opacity:0; transition:opacity .3s; font-size:14px; }
+    #start { position:fixed; inset:0; display:grid; place-items:center; background:linear-gradient(180deg,rgba(8,15,16,.48),rgba(7,13,14,.86)); z-index:5; }
+    #startCard { width:min(550px,calc(100vw - 32px)); padding:30px; border:1px solid #d5e4d533; border-radius:18px; background:rgba(13,23,23,.9); box-shadow:0 25px 100px #0009; }
+    #startCard h1 { margin:0 0 8px; font-size:clamp(25px,5vw,39px); letter-spacing:-.04em; }
+    #startCard p { color:#b9c9bd; line-height:1.55; }
+    #startCard button { pointer-events:auto; border:0; border-radius:8px; background:#c5d5a5; color:#18221a; font-weight:750; padding:12px 17px; cursor:pointer; font-size:14px; }
+    .tag { color:#aabf91!important; font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="brand" class="panel"><strong>DINOSAUR WORLD</strong><span>ESCAPE · PROTOTIPO 3D</span></div>
+    <div id="objectives" class="panel"><h2>Objetivo de misión</h2><div id="objectiveText">Localiza al Compsognathus en el bosque y recupéralo.</div></div>
+    <div id="prompt" class="panel">E · Interactuar</div>
+    <div id="help" class="panel">WASD mover · Ratón mirar · E interactuar · ESC liberar cursor</div>
+    <div id="status" class="panel">Robot: operativo · Componentes: 0</div>
+    <div id="crosshair"></div><div id="toast"></div>
+  </div>
+  <div id="venom"></div>
+  <div id="start"><div id="startCard"><p class="tag">Una experiencia de exploración 3D en primera versión</p><h1>Dinosaur World – Escape</h1><p>Un dinosaurio escapó de la isla y ha llegado al bosque junto a la ciudad. Explora la casa, encuentra el acceso al laboratorio subterráneo y recupera a tu compañero.</p><p><b>WASD</b> para moverte · <b>Ratón</b> para mirar · <b>E</b> para interactuar</p><button id="begin">Entrar al mundo</button></div></div>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9db5bc);
+    scene.fog = new THREE.FogExp2(0x9db5bc, 0.0038);
+    const camera = new THREE.PerspectiveCamera(67, innerWidth / innerHeight, .1, 650);
+    const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8)); renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+    document.body.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0xdce9ee, 0x4c5542, 1.55); scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffe7c2, 3.2); sun.position.set(-80,110,65); sun.castShadow = true;
+    sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-115; sun.shadow.camera.right=115; sun.shadow.camera.top=115; sun.shadow.camera.bottom=-115; sun.shadow.bias=-.0002; scene.add(sun);
+    const mats = {};
+    const mat=(name,color,rough=.8,metal=0)=>mats[name] ||= new THREE.MeshStandardMaterial({color,roughness:rough,metalness:metal});
+    const groundMat=mat('ground',0x66745b), concrete=mat('concrete',0x777d79), asphalt=mat('asphalt',0x303638), white=mat('white',0xd9d8ce), glass=new THREE.MeshPhysicalMaterial({color:0x9ec4ca,roughness:.16,metalness:.15,transparent:true,opacity:.48}), wood=mat('wood',0x735b42), darkWood=mat('darkWood',0x3c3933), leaf=mat('leaf',0x35513a), leaf2=mat('leaf2',0x526847), bark=mat('bark',0x514638), metal=mat('metal',0x626e70,.32,.78), robotMat=mat('robot',0x9da9a7,.28,.7), robotDark=mat('robotDark',0x253134,.34,.55), amber=mat('amber',0xffb94e,.25,.3), dinoSkin=mat('dino',0x7d8b63,.83), dinoCream=mat('dinoCream',0xc2b895,.9), screen=mat('screen',0x183a40,.22,.35);
+    function box(parent,x,y,z,sx,sy,sz,material,shadow=true){const o=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);o.position.set(x,y,z);o.castShadow=shadow;o.receiveShadow=true;parent.add(o);return o;}
+    function sphere(parent,x,y,z,sx,sy,sz,material,seg=16){const o=new THREE.Mesh(new THREE.SphereGeometry(1,seg,Math.max(8,seg>>1)),material);o.position.set(x,y,z);o.scale.set(sx,sy,sz);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;}
+    function cylinder(parent,x,y,z,rt,rb,h,material,segments=12){const o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,segments),material);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;}
+    function plane(x,z,w,d,y,material){const o=new THREE.Mesh(new THREE.PlaneGeometry(w,d),material);o.rotation.x=-Math.PI/2;o.position.set(x,y,z);o.receiveShadow=true;scene.add(o);return o;}
+    // Broad terrain, road network and sidewalks.
+    plane(0,0,500,500,0,groundMat);
+    plane(0,0,18,240,.015,asphalt); plane(0,0,230,12,.02,asphalt);
+    const lane=mat('lane',0xb7b29a,.95); for(let z=-110;z<110;z+=13) box(scene,0,.035,z,.17,.025,5,lane,false);
+    for(const z of [-8,8]) box(scene,0,.04,z,.2,.025,230,white,false);
+    for(const x of [-11,11]) box(scene,x,.06,0,4,.12,240,concrete,false);
+    for(const z of [-9,9]) box(scene,0,.06,z,230,.12,3,concrete,false);
+    // Ground surface variation: patches and stones create depth without external assets.
+    for(let i=0;i<190;i++){const x=(Math.random()-.5)*210,z=(Math.random()-.5)*220;if(Math.abs(x)<15||Math.abs(z)<10)continue;const patch=new THREE.Mesh(new THREE.CircleGeometry(1+Math.random()*2,9),new THREE.MeshStandardMaterial({color:i%3===0?0x77785b:0x5c6e52,roughness:1}));patch.rotation.x=-Math.PI/2;patch.position.set(x,.025,z);patch.scale.set(1+Math.random()*2,.7+Math.random()*1.5,1);scene.add(patch);}
+
+    function makeTree(x,z,scale=1){const g=new THREE.Group();g.position.set(x,0,z);g.scale.setScalar(scale);scene.add(g);cylinder(g,0,2.1,0,.23,.42,4.2,bark,9);sphere(g,0,4.7,0,1.9,2.1,1.8,Math.random()>.5?leaf:leaf2,12);sphere(g,-.9,4.2,.25,1.25,1.35,1.3,leaf2,12);sphere(g,.85,4.4,-.2,1.3,1.55,1.2,leaf,12);return g;}
+    for(let i=0;i<260;i++){let x,z;if(i<110){x=28+Math.random()*120;z=-100+Math.random()*200;}else{x=-110+Math.random()*220;z=25+Math.random()*100;}if(Math.abs(x)<18&&Math.abs(z)<22)continue;makeTree(x,z,.75+Math.random()*.75);}
+    for(let i=0;i<100;i++){const x=20+Math.random()*100,z=-70+Math.random()*140;const bush=sphere(scene,x,.45,z,.6+Math.random()*.8,.5,.7+Math.random()*.7,Math.random()>.5?leaf:leaf2,10);bush.castShadow=true;}
+
+    // Modern residential blocks, repeating detailed houses.
+    function house(x,z,primary=false){const g=new THREE.Group();g.position.set(x,0,z);scene.add(g);const wall=primary?mat('housewall',0xc9c6bb):mat('subwall',0xb5b7ad);const width=primary?15:11, depth=primary?12:9, h=primary?6.6:5.2;
+      box(g,0,h/2,0,width,h,depth,wall);box(g,0,h+.25,0,width+.4,.5,depth+.4,mat('roof',0x3d4747));
+      // A low parapet roof and window panes on the street-facing side.
+      for(const wx of [-width*.31,width*.31]){box(g,wx,3.8,depth/2+.03,2.5,2.3,.12,glass);box(g,wx,3.8,depth/2+.1,.08,2.4,.08,metal);box(g,wx,3.8,depth/2+.1,2.6,.08,.08,metal);}
+      box(g,0,1.3,depth/2+.09,1.5,2.6,.18,darkWood);box(g,0,.1,depth/2+1.15,4,.2,2.3,concrete);
+      if(primary){
+        // Explorably open-front interior: hallway, rooms, stairs, living room and kitchen.
+        box(g,0,.15,-depth/2+.12,width,.3,.2,wood); // rear sill
+        box(g,-width/2+.12,2.5,0,.25,5,depth,wall); box(g,width/2-.12,2.5,0,.25,5,depth,wall);
+        box(g,-3,2.55,-1,6,.22,.2,white); // room divider, leaves passage
+        // Living area furniture
+        box(g,-4,.6,-2,3.3,1,1.1,mat('sofa',0x77776d));box(g,-4,1.15,-2.05,3.3,.25,1.1,mat('sofa2',0x88877b));
+        box(g,-4,.55,-4.2,2.1,.25,1.2,wood);box(g,-4,1.25,-4.2,2.1,1.1,mat('tv',0x202827));
+        // kitchen cabinets and island
+        box(g,4,1.25,-4.1,5,2.5,1.1,white);box(g,4,2.55,-4.1,5,.12,1.1,concrete);box(g,3,.6,-1.7,2.3,1.2,1.2,darkWood);
+        // bedroom and stairs
+        box(g,4,.55,2.4,2.7,.45,3,white);box(g,4,.9,2.4,2.6,.3,2.9,mat('bed',0x84918c));
+        for(let i=0;i<9;i++)box(g,-1.2+i*.42,.22+i*.22,3.9,.8,.25,2.6,darkWood);
+        // Secret trapdoor / floor access marker
+        box(g,5,.18,4,1.8,.12,1.8,metal);const hatch=box(g,5,.27,4,1.5,.1,1.5,wood);hatch.userData.secret=true;
+        // Garden and garage
+        box(g,-10,.4,1,5,.8,6,mat('garage',0x878a82));box(g,-10,.4,4.1,5,.8,.12,metal);
+        for(let i=0;i<7;i++)makeTree(x-9+i*2.7,z+10, .45+Math.random()*.18);
+        const sign=box(g,0,.15,depth/2+2,1.6,.18,.18,amber); sign.userData.secret=true;
+      } else {
+        // More street-side homes and small planted front yards.
+        box(g,0,1.3,depth/2+.1,1.3,2.6,.2,darkWood);
+        box(g,0,.15,depth/2+2.6,width*.7,.3,4,concrete);
+      }
+      g.userData.primary=primary;return g;
+    }
+    house(0,19,true);
+    for(const [x,z] of [[-25,20],[25,20],[-27,43],[26,44],[-24,-23],[26,-24],[43,24],[-45,21]])house(x,z,false);
+    // Street lamps add urban scale and night-ready fixtures.
+    for(let z=-95;z<100;z+=24){for(const x of [-13,13]){cylinder(scene,x,3,z,.1,.13,6,metal);const arm=box(scene,x+(x<0?-.7:.7),5.7,z,1.5,.08,.08,metal);sphere(scene,x+(x<0?-1.35:1.35),5.5,z,.28,.16,.28,mat('lamp',0xffe5b3,.25),12);}}
+
+    // Secret underground research bunker beneath the protagonist's house.
+    const bunker=new THREE.Group();scene.add(bunker);bunker.position.set(0,-8,19);const floorMat=mat('bunkerFloor',0x333b3d,.65,.25), wallMat=mat('bunkerWall',0x475152,.78,.2);
+    box(bunker,0,-.2,0,24,.4,20,floorMat);box(bunker,0,3,-10,24,6,.5,wallMat);box(bunker,-12,3,0,.5,6,20,wallMat);box(bunker,12,3,0,.5,6,20,wallMat);box(bunker,0,3,10,24,6,.5,wallMat);box(bunker,0,6,0,24,.4,20,metal);
+    for(let x=-10;x<=10;x+=5){box(bunker,x,5.75,0,.08,.03,18,amber,false);}
+    // Lab tables, equipment, workbenches, monitors and shelving.
+    for(const x of [-8,0,8]){box(bunker,x,1.2,-4,4,.18,2,metal);for(const dx of [-1.6,1.6])for(const z of [-4.7,-3.3])cylinder(bunker,x+dx,.55,z,.08,.08,1.2,robotDark);box(bunker,x,2.3,-4.75,1.6,1.1,.1,screen);box(bunker,x,2.3,-4.65,.08,.9,.03,amber);}
+    for(const z of [-7,-2,3]){box(bunker,-10,2,z,.2,3,2.4,wood);for(let y=1.1;y<3.6;y+=.8){box(bunker,-9.6,y,z,1,.08,1.9,metal);for(let i=0;i<3;i++)box(bunker,-9.5+i*.35,y+.22,z,.23,.35,.3,amber);}}
+    // A built-in elevator/stair hatch is represented by a marked landing; press E near house access.
+    const bunkerDoor=box(bunker,0,1.6,9.7,2.5,3.2,.3,metal);box(bunker,0,2,9.5,1.8,.14,.12,amber);
+    // Dinosaur containment pen in the far side of the lab.
+    for(let i=-4;i<=4;i++){cylinder(bunker,i*1.3,1,-8,.055,.055,2,metal,8);}
+    for(const y of [.35,1.4])box(bunker,0,y,-8,11,.08,.08,metal);
+    bunker.visible=false;
+
+    // Character and third-person camera.
+    const player=new THREE.Group();scene.add(player);player.position.set(0,0,2);
+    const bodyMat=mat('jacket',0x4a5b56), pants=mat('pants',0x323d3e), skin=mat('skin',0xc3a17f);
+    sphere(player,0,1.53,0,.28,.34,.23,skin);box(player,0,1.02,0,.65,.68,.34,bodyMat);box(player,-.17,.43,0,.22,.58,.24,pants);box(player,.17,.43,0,.22,.58,.24,pants);box(player,0,.09,.08,.55,.16,.68,mat('boots',0x292c2a));
+    for(const x of [-.42,.42]){const arm=cylinder(player,x,1.02,0,.105,.13,.65,bodyMat);arm.rotation.z=x<0?-.12:.12;}
+    let yaw=0,pitch=-.12, keys={},isLocked=false,inBunker=false;
+    const forward=new THREE.Vector3();
+    function look(){const target=new THREE.Vector3(player.position.x,player.position.y+1.35,player.position.z);camera.position.set(target.x+Math.sin(yaw)*6.8,target.y+1.55+pitch*3,target.z+Math.cos(yaw)*6.8);camera.lookAt(target.x,target.y+.25,target.z);}
+
+    // Articulated, metallic humanoid companion.
+    const robot=new THREE.Group();scene.add(robot);robot.position.set(-2.2,-8,16);
+    sphere(robot,0,2.35,0,.47,.55,.34,robotMat);box(robot,0,1.45,0,.9,1.15,.52,robotMat);sphere(robot,0,.78,0,.34,.25,.29,robotDark);
+    for(const x of [-.65,.65]){sphere(robot,x,1.72,0,.22,.25,.25,metal);cylinder(robot,x,1.22,0,.14,.17,.72,robotMat);sphere(robot,x,.83,0,.19,.2,.2,metal);cylinder(robot,x,.42,0,.16,.2,.65,robotDark);box(robot,x,.08,.08,.42,.16,.55,robotMat);}
+    sphere(robot,0,3.05,0,.48,.42,.39,robotDark);sphere(robot,-.19,3.08,.32,.095,.075,.05,amber,12);sphere(robot,.19,3.08,.32,.095,.075,.05,amber,12);cylinder(robot,0,3.5,0,.06,.09,.35,metal);sphere(robot,0,3.69,0,.11,.11,.11,amber,12);
+    const robotStatus=box(robot,0,1.48,.275,.27,.15,.035,screen);robot.userData.upgrade=0;
+
+    // Small Compsognathus built from 3D meshes, with procedural locomotion and head motion.
+    const dino=new THREE.Group();scene.add(dino);dino.position.set(42,0,-12);const dinoCore=new THREE.Group();dino.add(dinoCore);
+    sphere(dinoCore,0,.85,0,.42,.38,.72,dinoSkin);sphere(dinoCore,0,1.12,.42,.29,.26,.48,dinoSkin);const dinoHead=new THREE.Group();dinoHead.position.set(0,1.27,.78);dinoCore.add(dinoHead);
+    sphere(dinoHead,0,0,.25,.26,.24,.31,dinoSkin);sphere(dinoHead,0,-.13,.53,.2,.12,.27,dinoCream);sphere(dinoHead,-.18,.08,.43,.045,.045,.04,mat('dinoEye',0x171b18,.15),12);sphere(dinoHead,.18,.08,.43,.045,.045,.04,mat('dinoEye',0x171b18,.15),12);
+    for(const s of [-1,1]){const leg=new THREE.Group();leg.position.set(s*.23,.57,.02);dinoCore.add(leg);cylinder(leg,0,-.23,0,.075,.055,.48,dinoSkin,10);sphere(leg,0,-.48,.12,.13,.07,.22,dinoCream,10);dino.userData['leg'+s]=leg;}
+    const tail=new THREE.Mesh(new THREE.ConeGeometry(.19,1.5,10),dinoSkin);tail.rotation.x=-Math.PI/2;tail.rotation.z=Math.PI;tail.position.set(0,.88,-.96);tail.scale.set(.75,.75,1);tail.castShadow=true;dinoCore.add(tail);
+    // Forelimbs
+    for(const s of [-1,1]){const arm=cylinder(dinoCore,s*.32,.94,.48,.05,.035,.35,dinoSkin,8);arm.rotation.x=-.5;}
+    const compLabel=box(dino,0,2.2,0,.03,.03,.03,dinoSkin,false);
+
+    // Salvageable tech components scattered between town and forest.
+    const pickups=[];for(const [x,z] of [[19,6],[31,-3],[55,13],[71,-27],[6,-13]]){const g=new THREE.Group();g.position.set(x,.2,z);scene.add(g);sphere(g,0,.35,0,.23,.23,.23,amber,12);const ring=new THREE.Mesh(new THREE.TorusGeometry(.36,.035,8,18),amber);ring.rotation.x=Math.PI/2;ring.position.y=.35;g.add(ring);pickups.push(g);}
+
+    // Interaction logic and story state.
+    let recovered=false,components=0,venomUntil=0,toastTimer=0,nearThing=null;const prompt=document.querySelector('#prompt'),objective=document.querySelector('#objectiveText'),status=document.querySelector('#status'),venom=document.querySelector('#venom'),toastEl=document.querySelector('#toast');
+    function toast(text){toastEl.textContent=text;toastEl.style.opacity=1;toastTimer=2.8;}
+    function distance(a,b){return Math.hypot(a.x-b.x,a.z-b.z);}
+    function switchLevel(){inBunker=!inBunker;bunker.visible=inBunker;player.position.set(0,0,inBunker?1:24);if(inBunker){player.position.y=-8;robot.position.set(-2.2,-8,16);}else{player.position.y=0;}toast(inBunker?'Laboratorio secreto':'Has salido de la casa');}
+    function interact(){if(!nearThing)return;
+      if(nearThing==='hatch'){switchLevel();return;}
+      if(nearThing==='robot'){
+        if(recovered){if(components>=2){components-=2;robot.userData.upgrade++;robot.scale.setScalar(1+robot.userData.upgrade*.025);toast('Mejora instalada: sensores y actuadores reforzados. El robot es inmune al veneno.');}else toast('El robot está operativo. Encuentra 2 componentes para mejorar sus sistemas.');}
+        else toast('Compañero operativo. Te ayudará a recuperar al dinosaurio.');return;
+      }
+      if(nearThing==='dino'){
+        if(!recovered){recovered=true;dino.visible=false;objective.innerHTML='✓ Compsognathus recuperado.<br>Regresa al laboratorio y mejora al robot con componentes.';toast('Compsognathus asegurado. Objetivo actualizado.');}
+        else toast('El dinosaurio ya está asegurado.');return;
+      }
+      if(typeof nearThing==='number'){const item=pickups[nearThing];item.visible=false;components++;status.textContent=`Robot: operativo · Componentes: ${components}`;toast('Componente tecnológico recogido.');pickups.splice(nearThing,1);return;}
+    }
+    addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyE')interact();});addEventListener('keyup',e=>keys[e.code]=false);
+    renderer.domElement.addEventListener('click',()=>{if(document.querySelector('#start').style.display==='none')renderer.domElement.requestPointerLock();});
+    document.addEventListener('pointerlockchange',()=>isLocked=document.pointerLockElement===renderer.domElement);
+    document.addEventListener('mousemove',e=>{if(!isLocked)return;yaw-=e.movementX*.0022;pitch=Math.max(-.55,Math.min(.5,pitch-e.movementY*.0018));});
+    document.querySelector('#begin').addEventListener('click',()=>{document.querySelector('#start').style.display='none';renderer.domElement.requestPointerLock();});
+
+    const clock=new THREE.Clock();let walkTime=0,dinoWander=0,dinoBite=0;
+    function update(dt){
+      const speed=(keys.ShiftLeft||keys.ShiftRight)?7.4:4.5;const dir=new THREE.Vector3();if(keys.KeyW)dir.z-=1;if(keys.KeyS)dir.z+=1;if(keys.KeyA)dir.x-=1;if(keys.KeyD)dir.x+=1;dir.normalize();
+      const sin=Math.sin(yaw),cos=Math.cos(yaw);const dx=(dir.x*cos+dir.z*sin)*speed*dt,dz=(-dir.x*sin+dir.z*cos)*speed*dt;
+      const nx=player.position.x+dx,nz=player.position.z+dz;
+      if(Math.abs(nx)<116&&Math.abs(nz)<116){player.position.x=nx;player.position.z=nz;}
+      if(dir.lengthSq()){player.rotation.y=Math.atan2(dir.x,dir.z);walkTime+=dt*9;player.children[2].rotation.x=Math.sin(walkTime)*.35;player.children[3].rotation.x=-Math.sin(walkTime)*.35;}
+      // Keep navigation on the ground, except while inside the subterranean level.
+      player.position.y=inBunker?-8:0;
+      if(inBunker){robot.position.y=-8;}
+      look();
+      // Dinosaur explores around its home area and turns naturally toward its wander direction.
+      dinoWander+=dt;const wandering=Math.sin(dinoWander*.45)*.55;dino.rotation.y=wandering;
+      dino.position.x=42+Math.sin(dinoWander*.22)*5;dino.position.z=-12+Math.cos(dinoWander*.31)*4;
+      dinoCore.position.y=.035+Math.abs(Math.sin(dinoWander*5))*.06;dinoHead.rotation.y=Math.sin(dinoWander*1.3)*.25;
+      dino.userData.leg1.rotation.x=Math.sin(dinoWander*5)*.35;dino.userData.legMinus1.rotation.x=-Math.sin(dinoWander*5)*.35;
+      const dinoNear=distance(player.position,dino.position)<2.2;
+      if(dinoNear&&!recovered){dinoBite+=dt;if(dinoBite>3.2){venomUntil=performance.now()+5200;dinoBite=0;toast('¡Mordisco! Efecto ficticio de veneno temporal.');}}
+      venom.style.opacity=performance.now()<venomUntil?'1':'0';
+      // Nearby interactable selection.
+      let best=2.7;nearThing=null;
+      const hatchDist=distance(player.position,{x:5,z:23});if(!inBunker&&hatchDist<best){best=hatchDist;nearThing='hatch';}
+      const robotDist=distance(player.position,robot.position);if(inBunker&&robotDist<best){best=robotDist;nearThing='robot';}
+      if(!recovered&&dinoNear&&distance(player.position,dino.position)<best){best=distance(player.position,dino.position);nearThing='dino';}
+      pickups.forEach((p,i)=>{if(!p.visible)return;const d=distance(player.position,p.position);if(d<best){best=d;nearThing=i;}});
+      prompt.style.opacity=nearThing?1:0;
+      if(nearThing==='hatch')prompt.textContent='E · Entrar al laboratorio secreto';else if(nearThing==='robot')prompt.textContent=recovered?'E · Mejorar / hablar con el robot':'E · Hablar con el robot';else if(nearThing==='dino')prompt.textContent='E · Recuperar Compsognathus';else if(typeof nearThing==='number')prompt.textContent='E · Recoger componente';
+      for(const p of pickups){if(p.visible)p.rotation.y+=dt*.7;}
+      if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)toastEl.style.opacity=0;}
+      if(inBunker)robot.rotation.y=Math.sin(clock.elapsedTime*.5)*.12;
+    }
+    function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04);update(dt);renderer.render(scene,camera);}
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+    animate();
+  </script>
+</body>
+</html>
